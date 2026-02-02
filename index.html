@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Timestamp Camera Pro</title>
+    <script src="https://unpkg.com/piexifjs@1.0.6/piexif.js"></script>
+
+    <style>
+        :root {
+            --primary: #0f5132; 
+            --primary-grad: linear-gradient(135deg, #0f5132 0%, #198754 100%);
+            --accent: #f59e0b;
+            --bg-dark: #0f172a;
+            --surface-dark: #1e293b;
+            --text-light: #f1f5f9;
+            --border-dark: #334155;
+            --radius-xl: 24px;
+            --radius-lg: 16px;
+            --radius-sm: 10px;
+        }
+
+        * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-dark);
+            margin: 0; padding: 0; color: var(--text-light);
+            height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+        }
+
+        header {
+            background: var(--surface-dark);
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border-dark);
+            display: flex; justify-content: space-between; align-items: center;
+            flex-shrink: 0; z-index: 10;
+        }
+
+        .app-title { font-size: 1.1rem; font-weight: 800; color: white; display: flex; align-items: center; gap: 10px; }
+
+        .viewport {
+            flex: 1; background: #000; position: relative;
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden; width: 100%;
+        }
+
+        canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+        .controls {
+            background: var(--surface-dark); flex: 1; padding: 20px;
+            border-top: 1px solid var(--border-dark);
+            display: flex; flex-direction: column; gap: 15px;
+            overflow-y: auto; padding-bottom: 140px; 
+        }
+
+        .action-row { display: flex; gap: 10px; }
+
+        .file-btn {
+            flex: 1; background: var(--border-dark); border: 1px dashed #64748b;
+            padding: 15px 5px; text-align: center; border-radius: var(--radius-sm);
+            position: relative; cursor: pointer; color: #fff;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        
+        .file-btn input { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; }
+
+        .input-group {
+            background: rgba(0,0,0,0.2); padding: 10px;
+            border-radius: var(--radius-sm); border: 1px solid var(--border-dark);
+        }
+
+        textarea {
+            width: 100%; background: var(--bg-dark); border: 1px solid var(--border-dark);
+            color: white; padding: 10px; border-radius: 6px; resize: none; font-size: 0.85rem;
+        }
+
+        .slider-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+
+        .slider-item label { display: block; font-size: 0.65rem; color: #94a3b8; font-weight: 700; margin-bottom: 4px; }
+        
+        .manual-input {
+            width: 100%; padding: 8px; border-radius: 5px; background: var(--bg-dark);
+            color: white; border: 1px solid var(--border-dark); font-size: 0.8rem;
+        }
+
+        .align-group { display: flex; gap: 5px; background: var(--bg-dark); padding: 5px; border-radius: var(--radius-sm); border: 1px solid var(--border-dark); }
+        
+        .align-btn {
+            flex: 1; background: transparent; border: none; color: #94a3b8;
+            padding: 8px 0; font-size: 0.7rem; font-weight: 700; border-radius: 5px;
+        }
+
+        .align-btn.active { background: var(--accent); color: var(--bg-dark); }
+
+        .fixed-footer {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: var(--surface-dark); padding: 15px 20px;
+            padding-bottom: env(safe-area-inset-bottom, 40px);
+            border-top: 1px solid var(--border-dark); z-index: 100;
+        }
+
+        .save-btn {
+            background: var(--primary-grad); color: white; border: none;
+            padding: 18px; border-radius: var(--radius-lg); font-size: 1rem;
+            font-weight: 700; width: 100%; box-shadow: 0 4px 15px rgba(15, 81, 50, 0.4);
+        }
+
+        .status-overlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.85);
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 150; text-align: center; color: white;
+        }
+
+        .hidden { display: none !important; }
+        
+        .toggle-container {
+            display: flex; align-items: center; gap: 8px; background: var(--bg-dark);
+            padding: 8px; border-radius: 5px; border: 1px solid var(--border-dark);
+        }
+        .toggle-container input { width: 18px; height: 18px; accent-color: var(--accent); }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="app-title">
+            <svg style="width:24px;height:24px;fill:#f59e0b;" viewBox="0 0 24 24"><path d="M12,2A9,9 0 0,0 3,11C3,16 12,22 12,22C12,22 21,16 21,11A9,9 0 0,0 12,2M12,4A7,7 0 0,1 19,11C19,14.21 15.19,18.57 12,20.67C8.81,18.57 5,14.21 5,11A7,7 0 0,1 12,4M11,6V12H16V10H13V8H11Z" /></svg>
+            Timestamp Camera Pro
+        </div>
+        <div style="font-size:0.7rem; color:#64748b;">v1.6 Solo</div>
+    </header>
+
+    <div class="viewport">
+        <canvas id="tsCanvas"></canvas>
+        <img id="tsSrcImg" class="hidden">
+        <video id="tsSrcVid" class="hidden" playsinline muted crossorigin="anonymous"></video>
+
+        <div id="tsStatusOverlay" class="status-overlay">
+            <div id="tsStatusText">Processing...</div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <div class="action-row">
+            <div class="file-btn" style="border-color: var(--accent);">
+                <span class="lbl">TAKE PHOTO</span>
+                <input type="file" id="tsFileInputPhoto" accept="image/*" capture="environment">
+            </div>
+            <div class="file-btn">
+                <span class="lbl">RECORD VIDEO</span>
+                <input type="file" id="tsFileInputVideo" accept="video/*" capture="environment">
+            </div>
+            <div class="file-btn" style="background: #334155;">
+                <span class="lbl">GALLERY</span>
+                <input type="file" id="tsFileInputGallery" accept="image/*,video/*">
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label style="font-size:0.7rem; color:#f59e0b; font-weight:bold; margin-bottom:5px; display:block;">CAPTION DETAILS</label>
+            <textarea id="txtCustom" rows="3" placeholder="Enter details..."></textarea>
+        </div>
+
+        <div class="input-group">
+            <div class="slider-grid">
+                <div class="slider-item">
+                    <label>DATE</label>
+                    <input type="date" id="tsDateInput" class="manual-input">
+                </div>
+                <div class="slider-item">
+                    <label>TIME</label>
+                    <input type="time" id="tsTimeInput" step="1" class="manual-input">
+                </div>
+                <div class="slider-item">
+                    <label>SHOW DAY</label>
+                    <div class="toggle-container">
+                        <input type="checkbox" id="chkShowDay" checked>
+                        <span style="font-size:0.7rem;">Active</span>
+                    </div>
+                </div>
+                <div class="slider-item">
+                    <label>FONT SIZE</label>
+                    <input type="range" id="rngSize" min="15" max="80" value="35">
+                </div>
+                <div class="slider-item">
+                    <label>POSITION Y</label>
+                    <input type="range" id="rngPos" min="0" max="100" value="95">
+                </div>
+                <div class="slider-item">
+                    <label>ALIGNMENT (X)</label>
+                    <div class="align-group">
+                        <button class="align-btn" data-align="left">LEFT</button>
+                        <button class="align-btn" data-align="center">CENTER</button>
+                        <button class="align-btn active" data-align="right">RIGHT</button>
+                    </div>
+                </div>
+                <div class="slider-item" style="grid-column: span 2;">
+                    <label>TEXT COLOR</label>
+                    <input type="color" id="tsColorInput" value="#ffffff" style="width:100%; height:35px; border:none; padding:0; background:none;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="fixed-footer">
+        <button id="btnTsAction" class="save-btn" disabled>Select Media to Start</button>
+    </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => { initTimestamp(); });
+
+    let tsCanvas, tsCtx, tsSrcImg, tsSrcVid, tsStatusOverlay, tsStatusText, btnTsAction;
+    let tsTxtCustom, tsRngPos, tsRngSize, tsDateInput, tsTimeInput, tsColorInput, chkShowDay;
+    let tsMode = null; 
+    let tsLoopId = null;
+    let currentAlign = 'right';
+
+    function initTimestamp() {
+        tsCanvas = document.getElementById('tsCanvas');
+        tsCtx = tsCanvas.getContext('2d', { alpha: false });
+        tsSrcImg = document.getElementById('tsSrcImg');
+        tsSrcVid = document.getElementById('tsSrcVid');
+        tsStatusOverlay = document.getElementById('tsStatusOverlay');
+        tsStatusText = document.getElementById('tsStatusText');
+        btnTsAction = document.getElementById('btnTsAction');
+        tsTxtCustom = document.getElementById('txtCustom');
+        tsRngPos = document.getElementById('rngPos');
+        tsRngSize = document.getElementById('rngSize');
+        tsDateInput = document.getElementById('tsDateInput');
+        tsTimeInput = document.getElementById('tsTimeInput');
+        tsColorInput = document.getElementById('tsColorInput');
+        chkShowDay = document.getElementById('chkShowDay');
+
+        const now = new Date();
+        tsDateInput.value = now.toISOString().split('T')[0];
+        tsTimeInput.value = now.toTimeString().split(' ')[0];
+
+        const saved = localStorage.getItem('tm_solo_settings');
+        if (saved) {
+            const s = JSON.parse(saved);
+            tsRngPos.value = s.pos || 95;
+            tsRngSize.value = s.size || 35;
+            tsColorInput.value = s.color || "#ffffff";
+            chkShowDay.checked = s.showDay !== false;
+            currentAlign = s.align || 'right';
+            if(s.text) tsTxtCustom.value = s.text;
+            document.querySelectorAll('.align-btn').forEach(b => b.classList.toggle('active', b.dataset.align === currentAlign));
+        }
+
+        document.getElementById('tsFileInputPhoto').addEventListener('change', handleTsFile);
+        document.getElementById('tsFileInputVideo').addEventListener('change', handleTsFile);
+        document.getElementById('tsFileInputGallery').addEventListener('change', handleTsFile);
+
+        document.querySelectorAll('.align-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.align-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentAlign = btn.dataset.align;
+                saveSettings(); drawTsFrame();
+            });
+        });
+
+        [tsTxtCustom, tsRngPos, tsRngSize, tsDateInput, tsTimeInput, tsColorInput, chkShowDay].forEach(el => {
+            el.addEventListener('input', () => {
+                saveSettings();
+                if(tsMode) drawTsFrame();
+            });
+        });
+
+        btnTsAction.addEventListener('click', () => {
+            if(tsMode === 'image') processTsImage();
+            else if(tsMode === 'video') processTsVideo();
+        });
+    }
+
+    function saveSettings() {
+        const settings = { pos: tsRngPos.value, size: tsRngSize.value, color: tsColorInput.value, text: tsTxtCustom.value, showDay: chkShowDay.checked, align: currentAlign };
+        localStorage.setItem('tm_solo_settings', JSON.stringify(settings));
+    }
+
+    function handleTsFile(e) {
+        const file = e.target.files[0];
+        if(!file) return;
+        cancelAnimationFrame(tsLoopId); tsSrcVid.pause();
+        const url = URL.createObjectURL(file);
+        if(file.type.startsWith('image/')) {
+            tsMode = 'image'; tsSrcImg.src = url;
+            tsSrcImg.onload = () => { tsCanvas.width = tsSrcImg.naturalWidth; tsCanvas.height = tsSrcImg.naturalHeight; drawTsFrame(); btnTsAction.innerText = "SAVE PHOTO"; btnTsAction.disabled = false; };
+        } else if(file.type.startsWith('video/')) {
+            tsMode = 'video'; tsSrcVid.src = url;
+            tsSrcVid.onloadedmetadata = () => {
+                const MAX_W = 720; let w = tsSrcVid.videoWidth, h = tsSrcVid.videoHeight;
+                if(w > MAX_W) { h = h * (MAX_W/w); w = MAX_W; }
+                tsCanvas.width = w; tsCanvas.height = h;
+                tsSrcVid.currentTime = 0; tsSrcVid.onseeked = () => { drawTsFrame(); btnTsAction.innerText = "PROCESS VIDEO"; btnTsAction.disabled = false; };
+            };
+        }
+    }
+
+    function getInputDateObj() {
+        return new Date(`${tsDateInput.value}T${tsTimeInput.value}`);
+    }
+
+    function getDisplayTime() {
+        const d = getInputDateObj();
+        const options = { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true };
+        if (chkShowDay.checked) options.weekday = 'long';
+        return d.toLocaleDateString('en-US', options);
+    }
+
+    function getFileTimestamp() {
+        const d = getInputDateObj();
+        const pad = n => n.toString().padStart(2, '0');
+        return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    }
+
+    function drawTsFrame() {
+        if(!tsMode) return;
+        if(tsMode === 'image') tsCtx.drawImage(tsSrcImg, 0, 0, tsCanvas.width, tsCanvas.height);
+        else tsCtx.drawImage(tsSrcVid, 0, 0, tsCanvas.width, tsCanvas.height);
+
+        const timeStr = getDisplayTime();
+        const scale = tsCanvas.height / 1280; 
+        const finalSize = Math.max(16, parseInt(tsRngSize.value) * scale);
+        tsCtx.font = `bold ${finalSize}px Arial`; tsCtx.fillStyle = tsColorInput.value;
+        tsCtx.shadowColor = "black"; tsCtx.shadowBlur = 4; tsCtx.shadowOffsetY = 2;
+        
+        let x = 0;
+        if(currentAlign === 'left') { tsCtx.textAlign = "left"; x = tsCanvas.width * 0.05; }
+        else if(currentAlign === 'center') { tsCtx.textAlign = "center"; x = tsCanvas.width / 2; }
+        else { tsCtx.textAlign = "right"; x = tsCanvas.width * 0.95; }
+        
+        tsCtx.textBaseline = "bottom";
+        let y = tsCanvas.height * (parseInt(tsRngPos.value) / 100);
+        
+        tsCtx.fillText(timeStr, x, y);
+        if(tsTxtCustom.value) {
+            y -= (finalSize * 1.25);
+            const lines = tsTxtCustom.value.split('\n').reverse();
+            lines.forEach(line => { if(line.trim() !== '') { tsCtx.fillText(line.toUpperCase(), x, y); y -= (finalSize * 1.25); } });
+        }
+        tsCtx.shadowColor = "transparent";
+    }
+
+    async function shareFile(blob, filename, mimeType) {
+        const file = new File([blob], filename, { type: mimeType });
+        if (navigator.share) {
+            try { await navigator.share({ files: [file] }); } catch (err) { }
+        } else {
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+        }
+        tsStatusOverlay.style.display = 'none';
+    }
+
+    function processTsImage() {
+        tsStatusOverlay.style.display = 'flex';
+        setTimeout(() => {
+            const dataUrl = tsCanvas.toDataURL("image/jpeg", 0.95);
+            let finalDataUrl = dataUrl;
+            
+            if(typeof piexif !== 'undefined') {
+                try {
+                    const d = getInputDateObj();
+                    const exifStr = `${d.getFullYear()}:${(d.getMonth()+1).toString().padStart(2,'0')}:${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`;
+                    const exifObj = { "0th": { [piexif.ImageIFD.DateTime]: exifStr }, "Exif": { [piexif.ExifIFD.DateTimeOriginal]: exifStr } };
+                    finalDataUrl = piexif.insert(piexif.dump(exifObj), dataUrl);
+                } catch(e) { console.error("EXIF Error", e); }
+            }
+
+            fetch(finalDataUrl).then(res => res.blob()).then(blob => shareFile(blob, `TimePhoto_${getFileTimestamp()}.jpg`, 'image/jpeg'));
+        }, 100);
+    }
+
+    function processTsVideo() {
+        tsStatusOverlay.style.display = 'flex';
+        btnTsAction.disabled = true;
+        const stream = tsCanvas.captureStream(30);
+        let mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm', videoBitsPerSecond: 3000000 });
+        let chunks = [];
+        mediaRecorder.ondataavailable = e => chunks.push(e.data);
+        mediaRecorder.onstop = () => shareFile(new Blob(chunks, { type: 'video/webm' }), `TimeVideo_${getFileTimestamp()}.webm`, 'video/webm');
+        tsSrcVid.currentTime = 0; mediaRecorder.start();
+        tsSrcVid.play().then(() => {
+            function step() {
+                if(!tsSrcVid.paused && !tsSrcVid.ended) { drawTsFrame(); tsLoopId = requestAnimationFrame(step); }
+                else { mediaRecorder.stop(); btnTsAction.disabled = false; }
+            }
+            step();
+        });
+    }
+</script>
+</body>
+</html>
